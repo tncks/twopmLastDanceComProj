@@ -1,0 +1,260 @@
+ASTERISK -> "*"
+SLASH -> "/"
+BANG -> "!"
+
+// Delimiters
+COMMA -> ","
+SEMICOLON -> ";"
+LPAREN -> "("
+RPAREN -> ")"
+LBRACE -> "{"
+RBRACE -> "}"
+LBRKT -> "["
+RBRKT -> "]"
+
+//// WS -> [\t\r\n ]
+
+
+-------------
+
+
+WS : (' '
+ | '\t'
+ | '\n'
+ | '\r')
+ { _ttype = Token.SKIP; }
+ ;
+LPAREN: '('
+ ;
+RPAREN: ')'
+ ;
+STAR: '*'
+ ;
+PLUS: '+'
+ ;
+SEMI: ';'
+ ;
+
+
+ 
+-------------
+
+
+
+Given a program such as
+float match0(char *s) /* find a zero */
+{if (!strncmp(s, "0.0", 3))
+ return 0.;
+}
+
+the lexical analyzer will return the stream
+
+FLOAT ID(match0) LPAREN CHAR STAR ID(s) RPAREN
+LBRACE IF LPAREN BANG ID(strncmp) LPAREN ID(s)
+COMMA STRING(0.0) COMMA NUM(3) RPAREN RPAREN
+RETURN REAL(0.0) SEMI RBRACE EOF
+
+
+-------------
+
+goto keyword
+do keyword 
+static keyword 
+typedef keyword 
+struct keyword 
+union keyword 
+
+preprosessor #
+#include 
+
+
+#define 
+
+
+#if  
+etc.....
+
+
+
+
+
+
+
+
+--------
+
+below, verbose...
+
+
+
+verbose thigns..
+
+
+char *tokclstring[] = {    "begin     ", "call      ",
+          "declare   ", "do        ", "else      ", "end       ",
+          "endif     ", "enduntil  ", "endwhile  ", "if        ",
+          "integer   ", "parameters", "procedure ", "program   ",
+          "read      ", "real      ", "set       ", "then      ",
+          "until     ", "while     ", "write     ", "star      ",
+          "plus      ", "minus     ", "slash     ", "equals    ",
+          "semicolon ", "comma     ", "period    ", "greater   ",
+          "less      ", "notequal  ", "openparen ", "closeparen",
+           "float     ","identifier", "constant  ", "error     ",
+          "eof       "
+};
+
+char *symtypestring[] =  {"unknown  ", "keyword  ", "program  ",
+		    "parameter", "variable ", "temp. var",
+		    "constant ", "enum     ", "struct   ",
+		    "union    ", "procedure", "function ",
+		    "label    ", "literal  ", "operator "
+};
+
+char *datatypestring[] = {"unknown","none   ", "program",
+                    "proced.", "integer", "real   "
+};
+
+
+
+/*
+ * The key words and operators - used in initializing the symbol
+table
+ */
+char *keystring[/*NUMTOKENS*/] = {"begin", "call", "declare",
+          "do", "else", "end", "endif", "enduntil", "endwhile",
+          "if", "integer", "parameters", "procedure", "program",
+          "read", "real", "set", "then", "until", "while",
+          "write", "*", "+", "-", "/", "=", ";",
+          ",", ".", ">", "<", "!", "(", ")", "_float"
+};
+
+char stringtable[STRINGTABLESIZE];
+
+
+struct nametabtype  nametable[TABLESIZE];
+struct symtabtype   symtab[SYMTABLESIZE];
+
+int  hashtab[HASHTABLESIZE];
+int  strtablen, namtablen, symtablen, auxtablen;
+procstackitem  thisproc;
+
+enum boolean   ispresent(char string[], int length, int *code,
+                                   int *nameindex);
+void      LexemeInCaps(int tabindex);
+int       hashcode(char string[], int length);
+void	makelabel(int tabindex, char *label);
+
+/*
+ * InitializeSymTab() -  Initializes the symbol table.
+ */
+void initializesymtab(void)
+{
+     int  i, nameindex;
+
+     initprocstack();
+     thisproc = initprocentry(-1);
+
+     /* initialize the hash table, the name table's next 
+          field and the attribute table's fields as -1.  */
+     for  (i = 0; i < HASHTABLESIZE;  i++)
+          hashtab[i] = -1;
+
+     for  (i = 0;  i < TABLESIZE;  i++)
+          nametable[i].nextname = -1;
+
+     for  (i = 0;  i < SYMTABLESIZE;  i++)   {
+          symtab[i].symtype = -1;
+          symtab[i].tok_class = -1;
+          symtab[i].thisname = -1;
+          symtab[i].value.tag = tint;
+          symtab[i].value.val.ival = 0;
+                symtab[i].owningprocedure = -1;
+          symtab[i].outerscope = -1;
+                symtab[i].scopenext = -1;
+          symtab[i].label[0] = '\0';
+     }
+
+     /* Install the keywords in the name table and
+               set their attributes to keyword */
+     for  (i = 0;  i < NUMKEYWORDS;  i++)    {
+          installname(keystring[i], &nameindex);
+          setattrib(stkeyword, i, nameindex);
+     }
+
+     /* Install the operators in the name table and
+               set their attributes to operator */
+     for  (i = NUMKEYWORDS; i < NUMTOKENS;  i++)  {
+          installname(keystring[i],&nameindex);
+          setattrib(stoperator, i, nameindex);
+     }
+
+     installname(keystring[i], &nameindex);
+     setattrib(stfunction, i, nameindex);
+     installdatatype(nameindex, stfunction, dtreal);
+
+     printf("all initiallized\n");
+}
+
+/*
+ * DumpSymbolTable() -   Prints out the basic symbol table
+ *             information, including the name and token class
+ */
+void dumpsymboltable(void)
+{
+     int  i, j;
+     char printstring[MAXLINE];
+
+     printf("SYMBOL TABLE DUMP\n-----------------\n\n");
+     printf("                   Token       Symbol     Data");
+     printf("              Owning\n");
+     printf("Index   Name       Class       Type       Type");
+     printf("    Value   Procedure    Label\n");
+     printf("-----   ----       -----       ------     ----");
+     printf("    -----   ---------\n");
+
+     for  (i = 0;  i < symtablen;  i++) {
+	  if (i%10 == 9) getchar();
+          printf("%5d\t",i);
+          printlexeme(i);
+
+	  /*
+           *   After printing the lexeme, move to column 20.  If
+	   *   the name is too long to permit, go to the next
+           *   line
+           */
+          if (nametable[symtab[i].thisname].strlength < 11)
+               for (j = 0;
+                         j < 11
+                    - nametable[symtab[i].thisname].strlength;
+                         j++)
+                    putchar(' ');
+          else
+               printf("\n          ");                           
+
+          /* Print the token class, symbol type and data type */
+          printf("%s  ",tokclstring[symtab[i].tok_class]);
+
+          printf("%s  ", symtypestring[symtab[i].symtype]);
+
+          printf("%s",  datatypestring[symtab[i].dataclass]);
+
+          if (symtab[i].value.tag == tint)
+               printf(" %5d", symtab[i].value.val.ival);
+          else
+               printf(" %8.3f", symtab[i].value.val.rval);
+
+          if (symtab[i].owningprocedure == -1)
+               printf("   global");
+          else {
+               printf("   ");
+	       LexemeInCaps(symtab[i].owningprocedure);
+	  }
+	  printf("   %s", symtab[i].label);
+	  putchar('\n');
+     }
+
+
+
+www.home.adelphi.edu/~siegfried/cs372/symbolc.html   
+
+ 
